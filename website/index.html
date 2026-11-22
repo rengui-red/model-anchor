@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创备模桥 ModelAnchor | 模桥通配，全域接续</title>
+    <meta name="description" content="一个模型无关的通配档案层。解决大模型会话遗忘、额度断连，让上下文在不同模型间无缝迁移。">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --text-main: #f0f0f0;
+            --text-muted: #888888;
+            --primary: #00f3ff; /* 赛博蓝 */
+            --secondary: #b500ff; /* 霓虹紫 */
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* 动态背景网格 */
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 30px 30px;
+            z-index: -2;
+            mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+        }
+
+        /* 光晕背景 */
+        .glow {
+            position: fixed;
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(0, 243, 255, 0.15) 0%, transparent 70%);
+            top: -200px; left: -100px;
+            z-index: -1;
+            filter: blur(60px);
+        }
+        .glow-2 {
+            top: auto; left: auto; bottom: -200px; right: -100px;
+            background: radial-gradient(circle, rgba(181, 0, 255, 0.15) 0%, transparent 70%);
+        }
+
+        /* 导航栏 */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 5%;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links a {
+            color: var(--text-main);
+            text-decoration: none;
+            margin-left: 30px;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        /* 主体内容 */
+        header {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 20px;
+            margin-top: 60px;
+        }
+
+        .slogan {
+            font-size: 1rem;
+            color: var(--primary);
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            padding: 6px 16px;
+            border-radius: 20px;
+            background: rgba(0, 243, 255, 0.05);
+        }
+
+        h1 {
+            font-size: 4rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            letter-spacing: -1px;
+        }
+
+        h1 span {
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin-bottom: 40px;
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(90deg, #00f3ff 0%, #0077ff 100%);
+            color: #000;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
+        }
+
+        .cta-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.6);
+        }
+
+        /* 功能卡片区 */
+        section {
+            padding: 100px 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 60px;
+            font-weight: 800;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 40px 30px;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s, border-color 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(0, 243, 255, 0.3);
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .icon {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+
+        /* 代码展示窗 */
+        .code-window {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 12px;
+            margin-top: 40px;
+            overflow: hidden;
+            text-align: left;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        .code-header {
+            background: #111;
+            padding: 10px 20px;
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid #222;
+        }
+
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot-r { background: #ff5f56; }
+        .dot-y { background: #ffbd2e; }
+        .dot-g { background: #27c93f; }
+
+        .code-body {
+            padding: 20px;
+            font-family: "Fira Code", monospace;
+            font-size: 0.9rem;
+            color: #a9b7c6;
+            line-height: 1.8;
+        }
+
+        .cmd { color: #00f3ff; }
+        .str { color: #27c93f; }
+        .comment { color: #666; }
+
+        /* 页脚 */
+        footer {
+            border-top: 1px solid rgba(255,255,255,0.05);
+            padding: 50px 5%;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .footer-links {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text-main);
+            text-decoration: none;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            h1 { font-size: 2.8rem; }
+            .nav-links { display: none; }
+            .subtitle { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 背景特效 -->
+    <div class="bg-grid"></div>
+    <div class="glow"></div>
+    <div class="glow glow-2"></div>
+
+    <!-- 导航栏 -->
+    <nav>
+        <div class="logo">ModelAnchor</div>
+        <div class="nav-links">
+            <a href="#features">核心功能</a>
+            <a href="#how-to-use">快速开始</a>
+            <a href="https://github.com/rengui-red/model-anchor" target="_blank">GitHub 仓库</a>
+            <a href="http://www.yitonghewei.com" target="_blank">返回公司官网</a>
+        </div>
+    </nav>
+
+    <!-- 首屏 Hero 区 -->
+    <header>
+        <div class="slogan">创有先备 · 模桥通配</div>
+        <h1>创备模桥 ModelAnchor<br><span>全域上下文接续</span></h1>
+        
+        <p class="subtitle">
+            ModelAnchor 是一个模型无关的通配档案层。解决大模型会话遗忘、额度断连、跨模型风格错乱。一套档案格式，多端运行，让你的每一次对话，都拥有持久的记忆基线。
+        </p>
+
+        <a href="https://github.com/rengui-red/model-anchor" class="cta-btn" target="_blank">
+            <svg height="20" viewBox="0 0 16 16" width="20" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+            下载体验 v0.1.0
+        </a>
+    </header>
+
+    <!-- 核心功能 -->
+    <section id="features">
+        <h2 class="section-title">为什么选择 ModelAnchor？</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="icon">🌉</div>
+                <h3>模桥通配</h3>
+                <p>不绑定任何单一模型。无论是 Claude、DeepSeek 还是千问、豆包，统一输出接续提示词，真正做到即插即用，无缝切换。</p>
+            </div>
+            <div class="card">
+                <div class="icon">🛡️</div>
+                <h3>基线不丢</h3>
+                <p>将项目定位、核心红线、当前断点固化为纯 Markdown 档案。避免 AI 在长会话中产生“遗忘”甚至推翻既定的技术决策。</p>
+            </div>
+            <div class="card">
+                <div class="icon">⚡</div>
+                <h3>极致轻量</h3>
+                <p>无后端、无数据库、零外部依赖。仅靠 Python 标准库与本地文件运行。数据 100% 存储于您的本机，安全私密。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 快速开始 -->
+    <section id="how-to-use" style="padding-top: 0;">
+        <h2 class="section-title">三步极速接入</h2>
+        <div class="code-window">
+            <div class="code-header">
+                <div class="dot dot-r"></div>
+                <div class="dot dot-y"></div>
+                <div class="dot dot-g"></div>
+            </div>
+            <div class="code-body">
+                <div class="comment"># 1. 在项目根目录初始化断点档案</div>
+                <div><span class="cmd">python</span> packer/pack.py --init</div>
+                <br>
+                <div class="comment"># 2. 将断点打包为目标模型的专属 Prompt（例如打包给豆包）</div>
+                <div><span class="cmd">python</span> packer/pack.py --model doubao --minimal</div>
+                <br>
+                <div class="comment"># 3. 复制终端输出的结果，直接粘贴到任意大模型的对话框，即刻接续开发！</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚与权属 -->
+    <footer>
+        <div class="footer-links">
+            <a href="http://www.yitonghewei.com" target="_blank">公司官网：www.yitonghewei.com</a>
+            <a href="https://github.com/rengui-red/model-anchor" target="_blank">GitHub 开源仓库</a>
+            <a href="https://github.com/rengui-red/model-anchor/blob/main/docs/00-宪章.md" target="_blank">项目宪章</a>
+            <a href="#">MIT License</a>
+        </div>
+        <p>© 2026 上海易通和维科技有限责任公司 / ModelAnchor. 保留所有权利。</p>  
+        <p>公司邮箱：contact@yitonghewei.com</p>
+        <p style="margin-top: 10px; font-size: 0.8rem;">创有先备，模桥通配。以桥连通各类模型，全域通配，续接完美。<br>ICP 备案号：沪 ICP 备 2026051000 号</p>
+    </footer>
+
+</body>
+</html>
+
+
+
